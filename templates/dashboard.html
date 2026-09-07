@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Customer Segments — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="/static/chart.umd.js"></script>
+<style>
+  :root{
+    --bg: #14151A;
+    --panel: #1C1E26;
+    --panel-2: #20222C;
+    --border: #2A2C36;
+    --text: #F2F0EA;
+    --muted: #8B8D98;
+    --amber: #E8B04B;
+    --teal: #4FD1C5;
+    --rose: #E0708A;
+    --violet: #9B8CF2;
+    --lime: #A9D171;
+    --sky: #6FB3E0;
+    --danger: #E06666;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter', sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3{ font-family:'Space Grotesk', sans-serif; margin:0; }
+  .mono{ font-family:'IBM Plex Mono', monospace; }
+
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:20px 32px; border-bottom:1px solid var(--border);
+    position:sticky; top:0; background:rgba(20,21,26,0.9); backdrop-filter:blur(8px);
+    z-index:10; flex-wrap:wrap; gap:12px;
+  }
+  .brand{ display:flex; align-items:center; gap:12px; }
+  .brand .dot{ width:10px; height:10px; border-radius:50%; background:var(--amber); box-shadow:0 0 12px var(--amber); }
+  .brand h1{ font-size:20px; font-weight:600; letter-spacing:-0.02em; }
+  .brand span{ color:var(--muted); font-size:13px; }
+
+  .controls{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .controls input{
+    background:var(--panel-2); border:1px solid var(--border); color:var(--text);
+    border-radius:8px; padding:8px 12px; font-family:'IBM Plex Mono',monospace; font-size:12px;
+  }
+  #apiBase{ width:220px; }
+  #kInput{ width:56px; text-align:center; }
+  button{
+    background:var(--amber); color:#1a1300; border:none; border-radius:8px;
+    padding:9px 16px; font-family:'Inter',sans-serif; font-weight:600; font-size:13px;
+    cursor:pointer; transition:opacity .15s ease;
+  }
+  button:hover{ opacity:.85; }
+  button:disabled{ opacity:.4; cursor:not-allowed; }
+  button.ghost{
+    background:transparent; border:1px solid var(--border); color:var(--text);
+  }
+  #status{ font-size:12px; color:var(--muted); }
+  #status.ok::before{ content:"● "; color:var(--lime); }
+  #status.err::before{ content:"● "; color:var(--danger); }
+  #status.pending::before{ content:"● "; color:var(--muted); }
+
+  main{ padding:28px 32px 60px; max-width:1400px; margin:0 auto; }
+
+  .kpi-row{ display:grid; grid-template-columns:repeat(5,1fr); gap:16px; margin-bottom:24px; }
+  .kpi{
+    background:var(--panel); border:1px solid var(--border); border-radius:var(--radius);
+    padding:18px 20px;
+  }
+  .kpi .label{ color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px; }
+  .kpi .value{ font-family:'Space Grotesk',sans-serif; font-size:26px; font-weight:600; }
+
+  .grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+  .panel{
+    background:var(--panel); border:1px solid var(--border); border-radius:var(--radius);
+    padding:20px;
+  }
+  .panel-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:4px; flex-wrap:wrap; }
+  .panel h2{ font-size:15px; font-weight:600; margin-bottom:4px; }
+  .panel .sub{ color:var(--muted); font-size:12px; margin-bottom:16px; }
+  .chart-wrap{ position:relative; height:280px; }
+  .chart-wrap.tall{ height:380px; }
+
+  .legend-row{ display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
+  .legend-chip{ display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); }
+  .legend-chip .sw{ width:9px; height:9px; border-radius:2px; }
+
+  .inline-form{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .inline-form label{ font-size:12px; color:var(--muted); }
+
+  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  thead th{
+    text-align:left; color:var(--muted); font-weight:500; font-size:11px;
+    text-transform:uppercase; letter-spacing:.05em; padding:0 12px 10px; border-bottom:1px solid var(--border);
+  }
+  tbody td{ padding:10px 12px; border-bottom:1px solid var(--border); }
+  tbody tr:hover{ background:var(--panel-2); }
+  tbody tr.highlight{ background:rgba(232,176,75,0.12); }
+  .cluster-badge{
+    display:inline-flex; align-items:center; gap:6px; padding:3px 9px; border-radius:20px;
+    font-family:'IBM Plex Mono',monospace; font-size:11px; background:var(--panel-2); border:1px solid var(--border);
+    white-space:nowrap;
+  }
+  .cluster-badge .sw{ width:7px; height:7px; border-radius:50%; }
+
+  .table-controls{ display:flex; gap:10px; align-items:center; margin-bottom:14px; flex-wrap:wrap; justify-content:space-between; }
+  .table-controls .left, .table-controls .right{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  select{
+    background:var(--panel-2); border:1px solid var(--border); color:var(--text);
+    border-radius:8px; padding:8px 12px; font-family:'Inter',sans-serif; font-size:13px;
+  }
+  .pager{ display:flex; align-items:center; gap:10px; margin-top:14px; justify-content:flex-end; }
+  .pager span{ color:var(--muted); font-size:12px; }
+  .pager button{ padding:6px 12px; font-size:12px; }
+  .pager button:disabled{ opacity:.35; cursor:not-allowed; }
+
+  .empty{ color:var(--muted); font-size:13px; padding:30px 0; text-align:center; }
+  .err-banner{
+    background:#2A1418; border:1px solid #5A2530; color:#F2A8B4; border-radius:var(--radius);
+    padding:14px 18px; font-size:13px; margin-bottom:20px; display:none;
+  }
+  .err-banner code{ font-family:'IBM Plex Mono',monospace; background:#1a0d10; padding:2px 6px; border-radius:4px; }
+
+  .lookup-result{ margin-top:10px; font-size:13px; color:var(--muted); }
+  .lookup-result strong{ color:var(--text); }
+
+  @media (max-width: 1000px){
+    .kpi-row{ grid-template-columns:1fr 1fr; }
+    .grid{ grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="dot"></div>
+    <div>
+      <h1>Customer Segments</h1>
+      <span>RFM + Return Rate clustering</span>
+    </div>
+  </div>
+  <div class="controls">
+    <input id="apiBase" type="text" value="" placeholder="http://127.0.0.1:8000" class="mono" />
+    <span id="status" class="pending mono">connecting…</span>
+    <button class="ghost" onclick="refreshAll()">Reload</button>
+  </div>
+</div>
+
+<main>
+  <div id="errBanner" class="err-banner"></div>
+
+  <div class="kpi-row" id="kpiRow">
+    <div class="kpi"><div class="label">Total customers</div><div class="value mono" id="kpiTotal">—</div></div>
+    <div class="kpi"><div class="label">Segments</div><div class="value mono" id="kpiClusters">—</div></div>
+    <div class="kpi"><div class="label">Avg. monetary value</div><div class="value mono" id="kpiMonetary">—</div></div>
+    <div class="kpi"><div class="label">Avg. return rate</div><div class="value mono" id="kpiReturn">—</div></div>
+    <div class="kpi"><div class="label">Active K</div><div class="value mono" id="kpiK">—</div></div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>Segment sizes</h2>
+      <div class="sub">Share of customers per segment</div>
+      <div class="chart-wrap"><canvas id="pieChart"></canvas></div>
+    </div>
+    <div class="panel">
+      <h2>Segment profile</h2>
+      <div class="sub">Average Recency / Frequency per segment</div>
+      <div class="chart-wrap"><canvas id="barChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-bottom:16px;">
+    <div class="panel-head">
+      <div>
+        <h2>Cluster separation (PCA)</h2>
+        <div class="sub">2D projection of customer features, colored by segment</div>
+      </div>
+    </div>
+    <div class="chart-wrap tall"><canvas id="pcaChart"></canvas></div>
+    <div class="legend-row" id="pcaLegend"></div>
+  </div>
+
+  <div class="panel" style="margin-bottom:16px;">
+    <div class="panel-head">
+      <div>
+        <h2>Choosing K (elbow method)</h2>
+        <div class="sub">Inertia (lower is tighter) and silhouette score (higher is better-separated) across candidate K values</div>
+      </div>
+      <div class="inline-form">
+        <label for="kInput">Re-cluster with K</label>
+        <input id="kInput" type="number" min="2" max="20" class="mono" placeholder="4" />
+        <button id="recomputeBtn" onclick="recompute()">Recompute</button>
+      </div>
+    </div>
+    <div class="chart-wrap"><canvas id="elbowChart"></canvas></div>
+  </div>
+
+  <div class="panel">
+    <h2>Customers</h2>
+    <div class="sub">Browse individual customers by segment, or look one up by ID</div>
+    <div class="table-controls">
+      <div class="left">
+        <select id="clusterFilter" onchange="onFilterChange()">
+          <option value="">All segments</option>
+        </select>
+        <span class="mono" id="tableCount" style="color:var(--muted); font-size:12px;"></span>
+      </div>
+      <div class="right">
+        <input id="lookupId" type="number" placeholder="Customer ID…" class="mono" style="width:130px;" />
+        <button class="ghost" onclick="lookupCustomer()">Find</button>
+        <button class="ghost" onclick="exportCSV()">Export CSV</button>
+      </div>
+    </div>
+    <div id="lookupResult" class="lookup-result" style="display:none;"></div>
+    <table>
+      <thead>
+        <tr>
+          <th>Customer ID</th><th>Segment</th><th>Recency</th><th>Frequency</th><th>Monetary</th><th>Return rate</th>
+        </tr>
+      </thead>
+      <tbody id="customerTableBody"></tbody>
+    </table>
+    <div id="tableEmpty" class="empty" style="display:none;">No customers found.</div>
+    <div class="pager">
+      <button class="ghost" id="prevBtn" onclick="changePage(-1)">Prev</button>
+      <span id="pageLabel" class="mono">page 1</span>
+      <button class="ghost" id="nextBtn" onclick="changePage(1)">Next</button>
+    </div>
+  </div>
+</main>
+
+<script>
+const PALETTE = ['#E8B04B', '#4FD1C5', '#9B8CF2', '#E0708A', '#A9D171', '#6FB3E0', '#F2A65A', '#7EC8B0'];
+const state = {
+  page: 0, limit: 15, cluster: '', totalRows: 0, highlightId: null,
+  pieChart: null, barChart: null, pcaChart: null, elbowChart: null,
+};
+
+function apiBase(){ return document.getElementById('apiBase').value.replace(/\/+$/, ''); }
+function colorFor(c){ return PALETTE[c % PALETTE.length]; }
+function setStatus(cls, text){
+  const el = document.getElementById('status');
+  el.className = cls + ' mono';
+  el.textContent = text;
+}
+function showError(msg){
+  const el = document.getElementById('errBanner');
+  el.style.display = 'block';
+  el.innerHTML = msg;
+}
+function hideError(){ document.getElementById('errBanner').style.display = 'none'; }
+
+async function fetchJSON(path, options){
+  const res = await fetch(apiBase() + path, options);
+  if(!res.ok){
+    let detail = '';
+    try{ detail = (await res.json()).detail || ''; }catch(e){}
+    throw new Error(`${path} → HTTP ${res.status}${detail ? ' — ' + detail : ''}`);
+  }
+  return res.json();
+}
+
+async function refreshAll(){
+  hideError();
+  setStatus('pending', 'connecting…');
+
+  if(typeof Chart === 'undefined'){
+    setStatus('err', 'error');
+    showError(
+      `Chart.js failed to load from <code>/static/chart.umd.js</code>. Make sure the ` +
+      `<code>static/</code> folder (with <code>chart.umd.js</code> inside it) sits next to ` +
+      `<code>main.py</code>, and that you're opening the dashboard via <code>http://127.0.0.1:8000/</code> ` +
+      `(not by double-clicking the HTML file directly).`
+    );
+    return;
+  }
+
+  try{
+    const health = await fetchJSON('/api/health');
+    if(health.status !== 'ok'){
+      throw new Error(health.detail || 'Pipeline is not ready yet');
+    }
+
+    const [summary, sizes, pca] = await Promise.all([
+      fetchJSON('/api/clusters/summary'),
+      fetchJSON('/api/clusters/sizes'),
+      fetchJSON('/api/clusters/pca'),
+    ]);
+    setStatus('ok', 'connected');
+    renderKPIs(summary, sizes, health);
+    renderPie(sizes);
+    renderBar(summary);
+    renderPCA(pca);
+    populateClusterFilter(sizes);
+    loadElbow();
+
+    document.getElementById('kInput').value = health.active_k ?? '';
+
+    state.page = 0;
+    loadCustomerTable();
+  }catch(err){
+    setStatus('err', 'disconnected');
+    showError(
+      `Couldn't reach the API at <code>${apiBase()}</code>. Make sure <code>uvicorn main:app --reload</code> ` +
+      `is running, the data file is where <code>DATA_PATH</code> expects it, and this dashboard is being served ` +
+      `by that same app (the API URL above is editable if not). ` +
+      `Details: ${err.message}`
+    );
+  }
+}
+
+function renderKPIs(summary, sizes, health){
+  const total = sizes.reduce((a,s)=>a+s.count, 0);
+  document.getElementById('kpiTotal').textContent = total.toLocaleString();
+  document.getElementById('kpiClusters').textContent = summary.length;
+
+  const wMonetary = summary.reduce((a,s)=>a + s.Avg_Monetary * s.Customers, 0) / total;
+  const wReturn = summary.reduce((a,s)=>a + s.Avg_Return_Rate * s.Customers, 0) / total;
+  document.getElementById('kpiMonetary').textContent = '£' + wMonetary.toFixed(0);
+  document.getElementById('kpiReturn').textContent = (wReturn*100).toFixed(1) + '%';
+  document.getElementById('kpiK').textContent = health.active_k ?? '—';
+}
+
+function renderPie(sizes){
+  const ctx = document.getElementById('pieChart');
+  if(state.pieChart) state.pieChart.destroy();
+  state.pieChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: sizes.map(s => s.segment_name),
+      datasets: [{
+        data: sizes.map(s => s.count),
+        backgroundColor: sizes.map(s => colorFor(s.cluster)),
+        borderColor: '#1C1E26',
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'right', labels: { color: '#8B8D98', font: { family: 'Inter', size: 12 } } },
+        tooltip: { callbacks: { label: (c) => `${c.label}: ${c.raw} customers` } }
+      }
+    }
+  });
+}
+
+function renderBar(summary){
+  const ctx = document.getElementById('barChart');
+  if(state.barChart) state.barChart.destroy();
+  const labels = summary.map(s => s.segment_name);
+  const gridColor = '#2A2C36';
+  state.barChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Recency (days)', data: summary.map(s=>s.Avg_Recency), backgroundColor: '#6FB3E0' },
+        { label: 'Frequency', data: summary.map(s=>s.Avg_Frequency), backgroundColor: '#A9D171' },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { ticks: { color: '#8B8D98', font:{family:'IBM Plex Mono', size:10}, maxRotation:20, minRotation:0 }, grid: { color: gridColor } },
+        y: { ticks: { color: '#8B8D98', font:{family:'IBM Plex Mono', size:11} }, grid: { color: gridColor } }
+      },
+      plugins: { legend: { position:'top', labels: { color: '#8B8D98', font:{family:'Inter', size:12} } } }
+    }
+  });
+}
+
+function renderPCA(points){
+  const ctx = document.getElementById('pcaChart');
+  const clusters = [...new Set(points.map(p=>p.cluster))].sort((a,b)=>a-b);
+  const nameByCluster = state.segmentNames || {};
+  const datasets = clusters.map(c => ({
+    label: nameByCluster[c] || `Cluster ${c}`,
+    data: points.filter(p=>p.cluster===c).map(p=>({x:p.pc1, y:p.pc2})),
+    backgroundColor: colorFor(c) + 'cc',
+    pointRadius: 3.5,
+  }));
+  if(state.pcaChart) state.pcaChart.destroy();
+  const gridColor = '#2A2C36';
+  state.pcaChart = new Chart(ctx, {
+    type: 'scatter',
+    data: { datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { title:{display:true, text:'PC1', color:'#8B8D98'}, ticks:{color:'#8B8D98'}, grid:{color:gridColor} },
+        y: { title:{display:true, text:'PC2', color:'#8B8D98'}, ticks:{color:'#8B8D98'}, grid:{color:gridColor} }
+      },
+      plugins: { legend: { display:false } }
+    }
+  });
+
+  const legend = document.getElementById('pcaLegend');
+  legend.innerHTML = clusters.map(c =>
+    `<div class="legend-chip"><span class="sw" style="background:${colorFor(c)}"></span> ${nameByCluster[c] || 'Cluster ' + c}</div>`
+  ).join('');
+}
+
+async function loadElbow(){
+  try{
+    const points = await fetchJSON('/api/clusters/elbow?k_min=2&k_max=10');
+    const ctx = document.getElementById('elbowChart');
+    if(state.elbowChart) state.elbowChart.destroy();
+    const gridColor = '#2A2C36';
+    state.elbowChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: points.map(p => p.k),
+        datasets: [
+          { label: 'Inertia', data: points.map(p=>p.inertia), borderColor: '#E8B04B', backgroundColor:'#E8B04B33', yAxisID: 'y', tension:.3 },
+          { label: 'Silhouette score', data: points.map(p=>p.silhouette), borderColor: '#4FD1C5', backgroundColor:'#4FD1C533', yAxisID: 'y1', tension:.3 },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: {
+          x: { title:{display:true, text:'K', color:'#8B8D98'}, ticks:{color:'#8B8D98'}, grid:{color:gridColor} },
+          y: { position:'left', title:{display:true, text:'Inertia', color:'#8B8D98'}, ticks:{color:'#8B8D98'}, grid:{color:gridColor} },
+          y1: { position:'right', title:{display:true, text:'Silhouette', color:'#8B8D98'}, ticks:{color:'#8B8D98'}, grid:{drawOnChartArea:false} }
+        },
+        plugins: { legend: { position:'top', labels: { color: '#8B8D98', font:{family:'Inter', size:12} } } }
+      }
+    });
+  }catch(err){
+    // Non-fatal: the rest of the dashboard still works without the elbow chart.
+    console.warn('Elbow chart unavailable:', err.message);
+  }
+}
+
+async function recompute(){
+  const btn = document.getElementById('recomputeBtn');
+  const k = document.getElementById('kInput').value;
+  btn.disabled = true;
+  btn.textContent = 'Recomputing…';
+  try{
+    const qs = k ? `?k=${encodeURIComponent(k)}` : '';
+    await fetchJSON(`/api/refresh${qs}`, { method: 'POST' });
+    await refreshAll();
+  }catch(err){
+    showError(`Recompute failed. Details: ${err.message}`);
+  }finally{
+    btn.disabled = false;
+    btn.textContent = 'Recompute';
+  }
+}
+
+function populateClusterFilter(sizes){
+  const sel = document.getElementById('clusterFilter');
+  const current = sel.value;
+  state.segmentNames = Object.fromEntries(sizes.map(s => [s.cluster, s.segment_name]));
+  sel.innerHTML = '<option value="">All segments</option>' +
+    sizes.map(s => `<option value="${s.cluster}">${s.segment_name} (${s.count})</option>`).join('');
+  sel.value = current;
+}
+
+function onFilterChange(){
+  state.cluster = document.getElementById('clusterFilter').value;
+  state.page = 0;
+  loadCustomerTable();
+}
+
+function rowHtml(r){
+  const highlightCls = state.highlightId !== null && Number(r['Customer ID']) === Number(state.highlightId) ? ' highlight' : '';
+  return `
+    <tr class="${highlightCls}">
+      <td class="mono">${r['Customer ID']}</td>
+      <td><span class="cluster-badge"><span class="sw" style="background:${colorFor(r.Cluster)}"></span>${r.segment_name || 'Cluster ' + r.Cluster}</span></td>
+      <td class="mono">${r.Recency}</td>
+      <td class="mono">${r.Frequency}</td>
+      <td class="mono">£${Number(r.Monetary).toFixed(0)}</td>
+      <td class="mono">${(r.Return_Rate*100).toFixed(1)}%</td>
+    </tr>
+  `;
+}
+
+async function loadCustomerTable(){
+  const offset = state.page * state.limit;
+  let path = `/api/customers?limit=${state.limit}&offset=${offset}`;
+  if(state.cluster !== '') path += `&cluster=${state.cluster}`;
+
+  try{
+    const data = await fetchJSON(path);
+    state.totalRows = data.total;
+    const tbody = document.getElementById('customerTableBody');
+    const emptyEl = document.getElementById('tableEmpty');
+
+    if(data.results.length === 0){
+      tbody.innerHTML = '';
+      emptyEl.style.display = 'block';
+    } else {
+      emptyEl.style.display = 'none';
+      tbody.innerHTML = data.results.map(rowHtml).join('');
+    }
+
+    document.getElementById('tableCount').textContent = `${data.total} customers`;
+    document.getElementById('pageLabel').textContent = `page ${state.page + 1} of ${Math.max(1, Math.ceil(data.total / state.limit))}`;
+    document.getElementById('prevBtn').disabled = state.page === 0;
+    document.getElementById('nextBtn').disabled = offset + data.results.length >= data.total;
+  }catch(err){
+    showError(`Couldn't load customer table. Details: ${err.message}`);
+  }
+}
+
+function changePage(delta){
+  state.page = Math.max(0, state.page + delta);
+  loadCustomerTable();
+}
+
+async function lookupCustomer(){
+  const id = document.getElementById('lookupId').value;
+  const resultEl = document.getElementById('lookupResult');
+  if(!id){ resultEl.style.display = 'none'; return; }
+
+  try{
+    const c = await fetchJSON(`/api/customers/${encodeURIComponent(id)}`);
+    state.highlightId = c['Customer ID'];
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = `Customer <strong>${c['Customer ID']}</strong> is in <strong>${c.segment_name}</strong> ` +
+      `— Recency ${c.Recency}d, Frequency ${c.Frequency}, Monetary £${Number(c.Monetary).toFixed(0)}, ` +
+      `Return rate ${(c.Return_Rate*100).toFixed(1)}%.`;
+
+    // Jump the filter/table to that customer's own cluster so the highlighted row is visible.
+    document.getElementById('clusterFilter').value = String(c.Cluster);
+    state.cluster = String(c.Cluster);
+    state.page = 0;
+    await loadCustomerTable();
+  }catch(err){
+    state.highlightId = null;
+    resultEl.style.display = 'block';
+    resultEl.textContent = `No customer found with ID ${id}.`;
+  }
+}
+
+async function exportCSV(){
+  const rows = [];
+  let offset = 0;
+  const pageSize = 200;
+  let total = Infinity;
+
+  try{
+    while(offset < total){
+      let path = `/api/customers?limit=${pageSize}&offset=${offset}`;
+      if(state.cluster !== '') path += `&cluster=${state.cluster}`;
+      const data = await fetchJSON(path);
+      total = data.total;
+      rows.push(...data.results);
+      offset += pageSize;
+    }
+  }catch(err){
+    showError(`Export failed. Details: ${err.message}`);
+    return;
+  }
+
+  const header = ['Customer ID', 'Segment', 'Recency', 'Frequency', 'Monetary', 'Return_Rate'];
+  const csvLines = [header.join(',')].concat(
+    rows.map(r => [r['Customer ID'], r.segment_name, r.Recency, r.Frequency, r.Monetary, r.Return_Rate].join(','))
+  );
+  const blob = new Blob([csvLines.join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'customer_segments.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+refreshAll();
+</script>
+
+</body>
+</html>
